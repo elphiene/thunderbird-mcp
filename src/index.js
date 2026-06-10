@@ -6,6 +6,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { getProfileDir, listAccounts, listFolders } from './profile.js'
 import { searchEmails, readEmail } from './email.js'
 import { listAddressBooks, listContacts } from './contacts.js'
+import { listCalendars, listEvents } from './calendar.js'
 
 const server = new McpServer({
   name: 'thunderbird-mcp',
@@ -149,6 +150,44 @@ server.registerTool(
     try {
       const contacts = await listContacts(args)
       return jsonResult(contacts)
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
+server.registerTool(
+  'list_calendars',
+  {
+    title: 'List calendars',
+    description: 'Lists all configured Thunderbird calendars (name, type, color, read-only flag, and the account they sync from, if any).',
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      return jsonResult(listCalendars())
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
+server.registerTool(
+  'list_events',
+  {
+    title: 'List calendar events',
+    description: 'Lists events from the local calendar cache, optionally filtered by calendar and date range. Requires Thunderbird to be closed (the cache database is locked while it runs).',
+    inputSchema: {
+      calendarId: z.string().optional().describe('Restrict to a single calendar id, as returned by list_calendars.'),
+      since: z.string().optional().describe('Only events ending on or after this date/time (ISO 8601 string).'),
+      until: z.string().optional().describe('Only events starting on or before this date/time (ISO 8601 string).'),
+      limit: z.number().int().min(1).max(200).optional().describe('Maximum number of results (default 50, max 200).'),
+    },
+  },
+  async (args) => {
+    try {
+      const events = await listEvents(args)
+      return jsonResult(events)
     } catch (error) {
       return errorResult(error)
     }

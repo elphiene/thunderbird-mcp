@@ -58,3 +58,28 @@ scans forward from `offset` until the next separator line or EOF.
 the actual message boundary.
 **Trade-off:** `read_email` must scan forward token-by-token rather than doing a single
 fixed-size read — negligible cost since messages are small relative to mbox files.
+
+## D-006 · Calendar read path requires Thunderbird closed; no real cached events to test against
+
+**Decided:** 2026-06-10
+**Context:** While building `src/calendar.js`, found that `calendar-data/local.sqlite`
+is held with an exclusive lock the entire time Thunderbird is running (unlike
+`abook*.sqlite`, which can be read concurrently). Additionally, in this profile
+`cal_events`/`cal_todos`/`cal_properties`/`cal_attendees`/`cal_recurrence` all have 0
+rows even with Thunderbird closed — none of the configured CalDAV calendars have a
+populated local cache yet.
+**Decision:** `listCalendars()` reads only `prefs.js` (`calendar.registry.*`) and works
+regardless of Thunderbird's state. `listEvents()` reads `calendar-data/local.sqlite`;
+if the file is missing it returns `[]`, and if it's locked it throws a clear error
+("Calendar database is locked — close Thunderbird and try again."). Date columns
+(`event_start`/`event_end`) are treated as PRTime (microseconds since the Unix epoch),
+matching Mozilla's `calStorageCalendar` convention; `cal_attendees`/`cal_recurrence`
+rows store raw `icalString` (e.g. `ATTENDEE;CN=...;PARTSTAT=...:mailto:...`), parsed
+with a small regex helper.
+**Why:** Schema (table/column names) was confirmed directly against this profile's
+`local.sqlite` (schema version 23), but row-level parsing (PRTime conversion, attendee
+icalString format) was verified only against a synthetic temp database with the same
+schema, since this profile has no real cached events.
+**Trade-off:** `list_events` will return `[]` until Thunderbird has synced and cached
+at least one calendar locally — re-verify against real data once that happens, and
+revisit the PRTime/icalString assumptions if results look wrong.

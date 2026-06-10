@@ -90,6 +90,21 @@ async function main() {
     throw new Error('Expected scoped contacts to all belong to the requested address book')
   }
 
+  // 7. list_calendars
+  const calendars = parseJsonResult(await client.callTool({ name: 'list_calendars', arguments: {} }))
+  console.log(`list_calendars: ${calendars.length} calendar(s)`)
+  if (!calendars.length) throw new Error('Expected at least one calendar')
+
+  // 8. list_events
+  const eventsResult = await client.callTool({ name: 'list_events', arguments: { limit: 10 } })
+  if (eventsResult.isError) {
+    console.log(`list_events: error (expected if Thunderbird is running) — ${eventsResult.content[0]?.text}`)
+  } else {
+    const events = JSON.parse(eventsResult.content[0].text)
+    console.log(`list_events: ${events.length} event(s)`)
+    if (!Array.isArray(events)) throw new Error('Expected list_events to return an array')
+  }
+
   await client.close()
   console.log('\nAll checks passed.')
 }

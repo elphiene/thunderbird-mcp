@@ -19,19 +19,22 @@
 
 - Milestones 1-3 (scaffold, profile discovery, email read path) — done.
 - Milestone 4 (contacts read path) — done.
-- Milestones 5+ (calendar, WebExtension, write paths) — not started.
+- Milestone 5 (calendar read path) — done.
+- Milestones 7+ (WebExtension, write paths) — not started.
 
 ## Modules
 
 - `src/profile.js` — locates the Thunderbird profile (`THUNDERBIRD_PROFILE` env var),
-  parses `prefs.js` for account/server/identity info, enumerates accounts and their
-  mbox folder trees.
+  parses `prefs.js` for account/server/identity/calendar info, enumerates accounts and
+  their mbox folder trees.
 - `src/mbox.js` — low-level mbox file splitter. Streams a mailbox file and yields raw
   RFC822 message bytes plus byte offsets, with `>From` unescaping.
 - `src/email.js` — structured email parsing (via `mailparser`) and search, built on
   `profile.js` + `mbox.js`.
 - `src/contacts.js` — address book discovery and contact listing/search, reading
   `abook*.sqlite`/`history.sqlite` via `sqlite3`.
+- `src/calendar.js` — calendar discovery (from `prefs.js`) and event listing, reading
+  `calendar-data/local.sqlite` via `sqlite3`.
 - `src/index.js` — MCP server entrypoint, registers tools and connects over stdio.
 
 ## Email read path
@@ -92,6 +95,37 @@ with `emails: []`.
 
 `lists`/`list_cards` tables exist but are empty in this profile — not surfaced for v0.
 
+## Calendar read path
+
+### Calendar discovery
+
+`listCalendars()` reads `calendar.registry.<uuid>.*` keys from `prefs.js` — this works
+regardless of whether Thunderbird is running, since it's pure prefs parsing. Each
+calendar has an `id` (the registry UUID), `name`, `type` (`storage` for the local
+"Home" calendar, `caldav` for synced calendars), `color`, `readOnly`, and `accountEmail`
+(from `.username`, for CalDAV calendars).
+
+### Event listing
+
+`listEvents()` reads `calendar-data/local.sqlite` (`cal_events`, joined with
+`cal_properties` for `LOCATION`/`DESCRIPTION`, `cal_attendees` for attendee lists, and
+`cal_recurrence` to flag recurring events). Supports filtering by `calendarId`,
+`since`/`until` (event end/start vs. an ISO date), and `limit` (default 50, max 200).
+
+**Caveats**:
+- `event_start`/`event_end` are stored as PRTime (microseconds since the Unix epoch),
+  per Mozilla's `calStorageCalendar` convention — converted to ISO 8601 strings.
+- `cal_attendees`/`cal_recurrence` store raw `icalString` values (e.g.
+  `ATTENDEE;CN=...;PARTSTAT=...:mailto:...`), parsed with a small regex helper.
+- **`calendar-data/local.sqlite` is held with an exclusive lock the entire time
+  Thunderbird is running** (unlike the mbox/abook files). `listEvents()` returns a
+  clear error in that case — `list_events` requires Thunderbird to be closed.
+- If the local cache has no events for a calendar yet (e.g. a CalDAV calendar that
+  hasn't synced/cached locally), `listEvents()` simply returns fewer/no results for
+  that calendar — this is not an error.
+
+See `docs/DECISIONS.md` (D-006) for how this was verified.
+
 ## Tools
 
 - `list_accounts` — lists configured Thunderbird accounts (email, display name,
@@ -103,3 +137,6 @@ with `emails: []`.
   syncs from.
 - `list_contacts` — lists/searches contacts across one or all address books, matching
   against name and email.
+- `list_calendars` — lists configured calendars (name, type, color, account).
+- `list_events` — lists events from the local calendar cache, filtered by calendar
+  and/or date range. Requires Thunderbird to be closed.
