@@ -13,7 +13,7 @@ const BRIDGE_PORT = Number(process.env.BRIDGE_PORT) || 8084
 
 const server = new McpServer({
   name: 'thunderbird-mcp',
-  version: '0.0.1',
+  version: '0.1.0',
 })
 
 function jsonResult(data) {

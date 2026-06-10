@@ -201,3 +201,18 @@ existing milestone.
 either by vendoring the experiment API (accepting the maintenance risk) or by adding
 direct CalDAV write support as a separate, explicitly-scoped feature with its own
 credential-handling design.
+
+**Follow-up:** Calendar write is a priority for a near-term post-v0.1.0 milestone, not
+a permanent cut. Before starting, research:
+- Current state of github.com/thunderbird/webext-experiments' calendar Experiment —
+  whether it's been promoted toward stable `browser.calendar` in any recent
+  Thunderbird release (re-check the supported-API list; this moves over time).
+- Whether a narrow, vendored Experiment API (just `calendar.items.create/update/remove`
+  + `calendar.calendars.query`, not the full draft surface) is maintainable enough to
+  accept, given `strict_min_version: "115.0"` already ties this extension to a
+  version range.
+- Direct CalDAV write (e.g. via `tsdav` or hand-rolled PROPFIND/PUT against the
+  CalDAV URLs already visible in `prefs.js`'s `calendar.registry.*` entries) as an
+  MCP-server-side alternative that wouldn't need any extension changes — scope the
+  credential-storage design (most likely reusing Thunderbird's existing stored
+  CalDAV credentials would require OS keychain access, which needs its own review).

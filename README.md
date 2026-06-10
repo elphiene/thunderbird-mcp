@@ -109,3 +109,32 @@ are not implemented — see `docs/DECISIONS.md` D-010.
   `127.0.0.1:8084` (override with `BRIDGE_PORT`) and must never be tunneled.
 - `sqlite3`, not `better-sqlite3` (required for Node v24 compatibility)
 - `THUNDERBIRD_PROFILE` must be set via environment variable — never hardcoded
+
+## Known limitations
+
+- **Calendar is read-only.** `create_event`/`update_event`/`delete_event` are not
+  implemented — Thunderbird has no standard `browser.calendar` WebExtension API (see
+  `docs/DECISIONS.md` D-010).
+- **`list_events` requires Thunderbird to be closed** — the calendar cache database
+  (`calendar-data/local.sqlite`) is held with an exclusive lock while Thunderbird runs
+  (D-006).
+- **Reply/reply-all are not implemented** — only compose-and-send (D-008).
+- Message ids from `search_emails`/`read_email` are based on mbox byte offsets and can
+  go stale after Thunderbird compacts a folder (e.g. emptying Trash) — re-run
+  `search_emails` if a tool reports "message not found".
+
+## Troubleshooting
+
+- **`bridge_status` reports `extensionConnected: false`**: make sure Thunderbird is
+  running and the extension is loaded (see "WebExtension" above), and that no other
+  thunderbird-mcp process is bound to the same `BRIDGE_PORT` (only one process can hold
+  the port; `npm run test:tools` uses a separate port for this reason).
+- **`list_events`/`list_contacts` report a "locked" error**: `list_events` requires
+  Thunderbird to be closed (D-006). `list_contacts` can hit this transiently while
+  Thunderbird is actively CardDAV-syncing an address book — wait a moment and retry
+  (D-008).
+- **A management tool (`move_message`, etc.) reports "message not found"**: the `id`
+  is stale — re-run `search_emails` to get a fresh one.
+- **Send/management/contact-write tools time out**: the extension didn't respond
+  within 30s. Check the Browser Console (Settings → General → "Add-ons and Themes" →
+  gear icon → "Debug Add-ons" → "Inspect") for errors in `background.js`.

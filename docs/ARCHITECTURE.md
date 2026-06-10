@@ -30,7 +30,9 @@
 - Milestone 8 (send path) — done.
 - Milestone 9 (message management) — done.
 - Milestone 11 (contact write) — done.
-- Milestone 10 (calendar write) — blocked, see D-010.
+- Milestone 12 (polish) — done.
+- Milestone 13 (v0.1.0 tag) — done; email/contacts read-write, calendar read-only.
+- Milestone 10 (calendar write) — blocked, see D-010 (follow-up research planned).
 
 ## Modules
 

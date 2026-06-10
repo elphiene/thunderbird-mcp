@@ -175,11 +175,13 @@ CLI/MCP tool — no UI. README should be clear enough for another Thunderbird us
 6. **Read-only v0.0.5 tag** — everything above working end-to-end, install docs written
 7. **WebExtension scaffold** — manifest + background script + localhost HTTP listener, loads in Thunderbird without errors
 8. **Send path** — compose and send from any account via extension bridge
-9. **Message management** — move, delete, tag/label via extension bridge
-10. **Calendar write path** — create, modify, delete events via extension bridge
-11. **Contact write path** — create and update contacts via extension bridge
-12. **Polish** — error handling, graceful degradation when extension is offline, README install guide
-13. **v0.1.0 tag** — full feature set working, public release
+9. ✅ **Message management** — move, delete, tag/label via extension bridge
+10. ⛔ **Calendar write path** — blocked: no standard `browser.calendar` WebExtension
+    API exists (see `docs/DECISIONS.md` D-010). Calendar remains read-only in v0.1.0;
+    follow-up research is tracked in D-010's "Follow-up" section.
+11. ✅ **Contact write path** — create and update contacts via extension bridge
+12. ✅ **Polish** — error handling, graceful degradation when extension is offline, README install guide
+13. ✅ **v0.1.0 tag** — email + contacts read-write, calendar read-only, public release
 
 ---
 
