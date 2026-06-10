@@ -127,11 +127,13 @@ Add to `~/.config/Claude/claude_desktop_config.json`:
 - Recurring event recurrence rule editing (can read, not modify RRULE)
 - Calendar invites / RSVP handling
 
-### Open questions (answer before v0.1.0)
-- What port for the WebExtension bridge? (run `check-projects`, pick available)
-- Is this Thunderbird using mbox or Maildir? (`ls ~/.thunderbird/*/Mail/`)
-- Which Thunderbird version? (determines MV2 vs MV3 for extension manifest)
-- Is Thunderbird Calendar (Lightning) installed and used?
+### Open questions — resolved (see `docs/DECISIONS.md`)
+- ~~What port for the WebExtension bridge?~~ → 8084 (D-002)
+- ~~mbox or Maildir?~~ → mbox (D-001)
+- ~~Which Thunderbird version?~~ → see D-003/profile notes; determines MV2 vs MV3 for
+  the extension manifest, to be confirmed when milestone 7 starts
+- ~~Is Thunderbird Calendar installed and used?~~ → yes, 9 calendars configured
+  (Google + iCloud CalDAV + local "Home" storage calendar)
 
 ---
 
@@ -164,11 +166,12 @@ CLI/MCP tool — no UI. README should be clear enough for another Thunderbird us
 
 ## 10. First milestones
 
-1. **Scaffold** — repo + CLAUDE.md + docs/ + .gitignore (public repo rules) + pick bridge port
-2. **Profile discovery** — detect Thunderbird profile dir, list accounts and folders, confirm mbox vs Maildir
-3. **Email read path** — parse mbox/Maildir, search and read messages, MCP tools wired up and testable in Cowork
-4. **Contact read path** — parse `abook.sqlite`, look up and list contacts
-5. **Calendar read path** — parse `calendar-data/*.sqlite`, list events by date/keyword across all calendars
+1. ✅ **Scaffold** — repo + CLAUDE.md + docs/ + .gitignore (public repo rules) + pick bridge port
+2. ✅ **Profile discovery** — detect Thunderbird profile dir, list accounts and folders, confirm mbox vs Maildir
+3. ✅ **Email read path** — parse mbox/Maildir, search and read messages, MCP tools wired up and testable in Cowork
+4. ✅ **Contact read path** — parse `abook*.sqlite`, look up and list contacts
+5. ✅ **Calendar read path** — parse `calendar-data/local.sqlite`, list events by date range across all calendars
+   (note: requires Thunderbird closed — see `docs/DECISIONS.md` D-006)
 6. **Read-only v0.0.5 tag** — everything above working end-to-end, install docs written
 7. **WebExtension scaffold** — manifest + background script + localhost HTTP listener, loads in Thunderbird without errors
 8. **Send path** — compose and send from any account via extension bridge
