@@ -17,8 +17,9 @@
 
 ## Current implementation status
 
-- Milestones 1-3 (scaffold, profile discovery, email read path) — in progress.
-- Milestones 4+ (contacts, calendar, WebExtension, write paths) — not started.
+- Milestones 1-3 (scaffold, profile discovery, email read path) — done.
+- Milestone 4 (contacts read path) — done.
+- Milestones 5+ (calendar, WebExtension, write paths) — not started.
 
 ## Modules
 
@@ -29,6 +30,8 @@
   RFC822 message bytes plus byte offsets, with `>From` unescaping.
 - `src/email.js` — structured email parsing (via `mailparser`) and search, built on
   `profile.js` + `mbox.js`.
+- `src/contacts.js` — address book discovery and contact listing/search, reading
+  `abook*.sqlite`/`history.sqlite` via `sqlite3`.
 - `src/index.js` — MCP server entrypoint, registers tools and connects over stdio.
 
 ## Email read path
@@ -61,10 +64,42 @@ LF for Thunderbird-added headers like `X-Mozilla-Status`). `src/mbox.js` scans t
 byte-by-byte for `\n` to compute exact offsets regardless of line-ending style, and
 unescapes mbox `>From`/`>>From`/... quoting at the byte level.
 
-## Tools (milestone 3)
+## Contacts read path
+
+### Address book discovery
+
+Thunderbird stores contacts in one or more `abook*.sqlite` / `history.sqlite` files in
+the profile directory, each with a `properties` table of `(card, name, value)` rows.
+`discoverAddressBooks()` finds these files and, where an address book is CardDAV-synced,
+maps it to the owning account's email via the `ldap_2.servers.<id>.filename` /
+`.description` / `.carddav.username` keys in `prefs.js`.
+
+### Contact shape
+
+Each contact card is assembled from its `properties` rows into:
+
+```js
+{ addressBook, addressBookLabel, cardId, displayName, firstName, lastName, emails: [] }
+```
+
+`emails` is a deduplicated union of the `PrimaryEmail`/`SecondEmail` properties (used by
+the iCloud/CardDAV address book) and any `EMAIL`/`ITEM\d+.EMAIL` fields found in the
+card's `_vCard` (vCard 3.0, regex-parsed — no vCard library dependency). Cards with no
+email at all (common in the synced Google address books in this profile) still appear,
+with `emails: []`.
+
+### Mailing lists
+
+`lists`/`list_cards` tables exist but are empty in this profile — not surfaced for v0.
+
+## Tools
 
 - `list_accounts` — lists configured Thunderbird accounts (email, display name,
   hostname, type).
 - `list_folders` — lists the folder tree for an account (or all accounts).
 - `search_emails` — search by account/folder/sender/subject/keyword/date range.
 - `read_email` — full headers + text body + attachment metadata for one message `id`.
+- `list_address_books` — lists configured address books and the account (if any) each
+  syncs from.
+- `list_contacts` — lists/searches contacts across one or all address books, matching
+  against name and email.

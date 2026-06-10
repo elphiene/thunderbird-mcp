@@ -6,6 +6,7 @@ const PREFS_PREFIXES = [
   'mail.server.',
   'mail.identity.',
   'mail.accountmanager.accounts',
+  'ldap_2.servers.',
 ]
 
 /**

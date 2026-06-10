@@ -71,6 +71,25 @@ async function main() {
   if (!noFilterResult.isError) throw new Error('Expected search_emails with no filters to error')
   console.log('search_emails with no filters: correctly rejected')
 
+  // 5. list_address_books
+  const addressBooks = parseJsonResult(await client.callTool({ name: 'list_address_books', arguments: {} }))
+  console.log(`list_address_books: ${addressBooks.length} address book(s)`)
+  if (!addressBooks.length) throw new Error('Expected at least one address book')
+
+  // 6. list_contacts
+  const contacts = parseJsonResult(await client.callTool({ name: 'list_contacts', arguments: { limit: 200 } }))
+  console.log(`list_contacts: ${contacts.length} contact(s), ${contacts.filter((c) => c.emails.length).length} with email`)
+  if (!Array.isArray(contacts)) throw new Error('Expected list_contacts to return an array')
+
+  // list_contacts scoped to a single address book
+  const scopedContacts = parseJsonResult(
+    await client.callTool({ name: 'list_contacts', arguments: { addressBook: addressBooks[0].id, limit: 200 } })
+  )
+  console.log(`list_contacts (scoped to ${addressBooks[0].id}): ${scopedContacts.length} contact(s)`)
+  if (!scopedContacts.every((c) => c.addressBook === addressBooks[0].id)) {
+    throw new Error('Expected scoped contacts to all belong to the requested address book')
+  }
+
   await client.close()
   console.log('\nAll checks passed.')
 }

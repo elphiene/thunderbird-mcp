@@ -10,7 +10,8 @@ files and does **not** require Thunderbird to be running.
 ## Status
 
 - ✅ Email read path: list accounts/folders, search emails, read full messages
-- ⏳ Contacts and calendar read paths — not yet implemented
+- ✅ Contacts read path: list address books, list/search contacts
+- ⏳ Calendar read path — not yet implemented
 - ⏳ Send/manage email, contact and calendar writes (via a Thunderbird WebExtension) —
   not yet implemented
 
@@ -63,6 +64,8 @@ accounts" or "search my inbox for invoices".
 - `list_folders` — lists the folder tree for an account
 - `search_emails` — search by account, folder, sender, subject, keyword, date range
 - `read_email` — full headers, text body, and attachment metadata for one message
+- `list_address_books` — lists configured address books and their synced account
+- `list_contacts` — lists/searches contacts by name or email
 
 See `docs/ARCHITECTURE.md` for how email parsing and message addressing work, and
 `docs/BRIEF.md` for the full project scope and roadmap.

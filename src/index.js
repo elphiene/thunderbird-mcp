@@ -5,6 +5,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { getProfileDir, listAccounts, listFolders } from './profile.js'
 import { searchEmails, readEmail } from './email.js'
+import { listAddressBooks, listContacts } from './contacts.js'
 
 const server = new McpServer({
   name: 'thunderbird-mcp',
@@ -111,6 +112,43 @@ server.registerTool(
     try {
       const message = await readEmail({ id })
       return jsonResult(message)
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
+server.registerTool(
+  'list_address_books',
+  {
+    title: 'List address books',
+    description: 'Lists all configured Thunderbird address books, including which account (if any) each one syncs from.',
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      return jsonResult(listAddressBooks())
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
+server.registerTool(
+  'list_contacts',
+  {
+    title: 'List/search contacts',
+    description: 'Lists or searches Thunderbird contacts across one or all address books. Matches against display name, first/last name, and email addresses.',
+    inputSchema: {
+      query: z.string().optional().describe('Case-insensitive substring to match against name or email. Omit to list all contacts.'),
+      addressBook: z.string().optional().describe('Restrict to a single address book id, as returned by list_address_books.'),
+      limit: z.number().int().min(1).max(200).optional().describe('Maximum number of results (default 50, max 200).'),
+    },
+  },
+  async (args) => {
+    try {
+      const contacts = await listContacts(args)
+      return jsonResult(contacts)
     } catch (error) {
       return errorResult(error)
     }
