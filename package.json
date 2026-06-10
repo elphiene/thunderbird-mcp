@@ -1,6 +1,6 @@
 {
   "name": "thunderbird-mcp",
-  "version": "0.0.1",
+  "version": "0.0.5",
   "description": "MCP server giving Claude full control of Thunderbird — email, contacts, and calendar across all connected accounts including iCloud",
   "type": "module",
   "private": true,
