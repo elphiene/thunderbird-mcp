@@ -114,7 +114,11 @@ are not implemented — see `docs/DECISIONS.md` D-010.
 
 - **Calendar is read-only.** `create_event`/`update_event`/`delete_event` are not
   implemented — Thunderbird has no standard `browser.calendar` WebExtension API (see
-  `docs/DECISIONS.md` D-010).
+  `docs/DECISIONS.md` D-010). **Workaround for Google-backed calendars**: if your
+  Thunderbird calendar is CalDAV-synced from a Google account, use Claude's separate
+  Google Calendar connector to create/update/delete events on that account directly —
+  the change syncs back into Thunderbird and shows up via `list_events`. This doesn't
+  help with iCloud-backed calendars.
 - **`list_events` requires Thunderbird to be closed** — the calendar cache database
   (`calendar-data/local.sqlite`) is held with an exclusive lock while Thunderbird runs
   (D-006).

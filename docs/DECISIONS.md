@@ -216,3 +216,26 @@ a permanent cut. Before starting, research:
   MCP-server-side alternative that wouldn't need any extension changes — scope the
   credential-storage design (most likely reusing Thunderbird's existing stored
   CalDAV credentials would require OS keychain access, which needs its own review).
+
+**Practical workaround for Google-backed calendars (2026-06-11):** `list_calendars`
+shows most of this profile's calendars are CalDAV-synced from Google accounts
+(`headsinthecloudsmct@gmail.com`, `eloiserosegb@gmail.com`). Claude Desktop/Cowork
+already has a separate, first-class **Google Calendar connector**
+(`mcp__claude_ai_Google_Calendar__*`: `create_event`, `update_event`, `delete_event`,
+`list_events`, etc.) — confirmed connected to `eloiserosegb@gmail.com` in this
+environment. For calendars backed by that account, Claude can write events via the
+Google Calendar connector directly; Thunderbird's CalDAV sync picks up the change and
+it becomes visible (read-only) via `list_events` here. **This is not a thunderbird-mcp
+feature** — it's an orthogonal connector outside this project, but it closes the
+practical gap for Google calendars without any code changes.
+
+This does **not** cover:
+- The `headsinthecloudsmct@gmail.com` Google account's calendars ("El",
+  "headsinthecloudsmct@gmail.com") — that account isn't connected to the Google
+  Calendar connector in this environment yet (would need to be added in Cowork's
+  connector settings).
+- The four `takearose@icloud.com` CalDAV calendars ("Medical appointments",
+  "notification", "Reminders", "Work") — iCloud, no equivalent connector exists. This
+  was the brief's original "iCloud has no other MCP" motivation and remains the
+  strongest case for eventually solving milestone 10 properly within thunderbird-mcp
+  (vendored Experiment API or direct CalDAV write).
