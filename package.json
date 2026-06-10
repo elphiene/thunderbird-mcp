@@ -1,0 +1,17 @@
+{
+  "name": "thunderbird-mcp",
+  "version": "0.0.1",
+  "description": "MCP server giving Claude full control of Thunderbird — email, contacts, and calendar across all connected accounts including iCloud",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "node src/index.js",
+    "test:tools": "node scripts/test-client.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "dotenv": "^16.4.5",
+    "mailparser": "^3.9.9"
+  }
+}

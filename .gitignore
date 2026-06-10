@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+*.log
+*.db*
+data/
+.env
+.env.local
+CLAUDE.md
+.claude/
+PLAN.md
