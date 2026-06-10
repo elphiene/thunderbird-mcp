@@ -68,6 +68,10 @@ async function executeCommand(command) {
         return { ok: true, result: await setMessageRead(command.payload) }
       case 'update_message_tags':
         return { ok: true, result: await updateMessageTags(command.payload) }
+      case 'create_contact':
+        return { ok: true, result: await createContact(command.payload) }
+      case 'update_contact':
+        return { ok: true, result: await updateContact(command.payload) }
       default:
         return { ok: false, error: `Unknown command type: ${command.type}` }
     }
@@ -116,6 +120,29 @@ async function updateMessageTags({ accountId, folderPath, headerMessageId, addTa
   const result = [...tags]
   await browser.messages.update(message.id, { tags: result })
   return { tags: result }
+}
+
+// Resolves an address book identified by the MCP server's label (the same
+// "label" returned by list_address_books, e.g. "Personal Address Book" or a
+// CardDAV address book's display name) to its WebExtension addressBookId.
+async function findAddressBookByLabel(label) {
+  const books = await browser.addressBooks.list()
+  const book = books.find((b) => b.name === label)
+  if (!book) {
+    throw new Error(`Address book "${label}" not found (available: ${books.map((b) => b.name).join(', ')})`)
+  }
+  return book
+}
+
+async function createContact({ addressBookLabel, properties }) {
+  const book = await findAddressBookByLabel(addressBookLabel)
+  const id = await browser.contacts.create(book.id, properties)
+  return { id }
+}
+
+async function updateContact({ cardId, properties }) {
+  await browser.contacts.update(cardId, properties)
+  return { updated: true }
 }
 
 async function sendEmail({ fromEmail, to, cc, bcc, subject, body, isPlainText = true }) {

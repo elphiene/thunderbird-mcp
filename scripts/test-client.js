@@ -200,6 +200,41 @@ async function main() {
     console.log('message management tools: skipped (no search results, or extension connected)')
   }
 
+  // 13. contact write tools — only check error paths that don't require the
+  // extension (unknown address book / no fields to update), plus the
+  // "extension not connected" path.
+  const createNoFieldsResult = await client.callTool({
+    name: 'create_contact',
+    arguments: { addressBook: addressBooks[0].id },
+  })
+  if (!createNoFieldsResult.isError) throw new Error('Expected create_contact with no name/email fields to error')
+  console.log('create_contact with no fields: correctly rejected')
+
+  const updateNoFieldsResult = await client.callTool({
+    name: 'update_contact',
+    arguments: { cardId: 'not-a-real-card-id' },
+  })
+  if (!updateNoFieldsResult.isError) throw new Error('Expected update_contact with no fields to error')
+  console.log('update_contact with no fields: correctly rejected')
+
+  if (!bridgeStatus.extensionConnected) {
+    const createUnknownAbResult = await client.callTool({
+      name: 'create_contact',
+      arguments: { addressBook: 'not-a-real-address-book.sqlite', displayName: 'Test Contact' },
+    })
+    if (!createUnknownAbResult.isError) throw new Error('Expected create_contact with an unknown address book to error')
+    console.log(`create_contact (unknown address book): correctly rejected — ${createUnknownAbResult.content[0]?.text}`)
+
+    const updateNotConnectedResult = await client.callTool({
+      name: 'update_contact',
+      arguments: { cardId: 'not-a-real-card-id', displayName: 'Test Contact' },
+    })
+    if (!updateNotConnectedResult.isError) throw new Error('Expected update_contact to error when extension is not connected')
+    console.log(`update_contact (not connected): correctly rejected — ${updateNotConnectedResult.content[0]?.text}`)
+  } else {
+    console.log('contact write tools: skipped further checks (extension connected)')
+  }
+
   await client.close()
   console.log('\nAll checks passed.')
 }

@@ -165,3 +165,39 @@ the `id` was issued, the extension's query finds nothing and returns a "not foun
 error — the caller must re-`search_emails` for a fresh `id`. `update_message_tags`
 takes `addTags`/`removeTags` (not a full replace) to avoid a separate "get current
 tags" round trip from the MCP server.
+
+## D-010 · Milestone 10 (calendar write) is blocked — no standard `browser.calendar` API
+
+**Decided:** 2026-06-11
+**Context:** The brief listed `calendar` as a WebExtension permission "if available in
+the installed Thunderbird version" (an acknowledged open question). Researching
+milestone 10 (`create_event`/`update_event`/`delete_event`) found that Thunderbird's
+supported WebExtension API list
+(developer.thunderbird.net/add-ons/mailextensions/supported-webextension-api) has
+**no `calendar` namespace** — `accounts`, `addressBooks`, `contacts`, `compose`,
+`folders`, `mailingLists`, `mailTabs`, `menus`, `messages`, etc. are all supported, but
+not calendar read/write. The only calendar WebExtension API is a third-party **draft
+"Experiment" API** (github.com/thunderbird/webext-experiments, by the Lightning
+maintainer) — an unofficial, privileged chrome-JS API that must be vendored into the
+extension itself, bypassing the standard `browser.*` sandbox.
+
+**Decision:** Milestone 10 is **not implemented** in v0.1.0. Calendar remains
+read-only (`list_calendars`/`list_events`, milestone 5). `README.md`/`ARCHITECTURE.md`
+mark milestone 10 as blocked rather than "not started", so v0.1.0 ships as "read-only
+calendar + full email/contact read-write".
+
+**Why:** Vendoring an unofficial draft "Experiment" API would (a) violate the brief's
+"keep the extension a thin shim, all logic in the MCP server" and "don't put logic in
+the WebExtension beyond a thin API shim" constraints — Experiment APIs are implemented
+as privileged JS *inside* the extension, not `browser.*` calls; (b) add a dependency on
+draft, versioned-per-Thunderbird-release chrome JS that could break on any Thunderbird
+update, undermining the "thin shim" maintainability goal; and (c) a CalDAV-direct
+alternative (writing to iCloud/Google calendars over CalDAV from the MCP server,
+bypassing Thunderbird) would require a new credential-storage design not covered by any
+existing milestone.
+
+**Trade-off:** v0.1.0 cannot create/modify/delete calendar events — only list them
+(and only with Thunderbird closed, per D-006). A future milestone could revisit this
+either by vendoring the experiment API (accepting the maintenance risk) or by adding
+direct CalDAV write support as a separate, explicitly-scoped feature with its own
+credential-handling design.

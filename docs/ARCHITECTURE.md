@@ -12,8 +12,10 @@
      local-only HTTP bridge.
 2. **Thunderbird WebExtension** (`extension/`) — thin shim. Sends a periodic heartbeat
    with the account list, and polls the bridge for commands to execute via
-   `browser.*` APIs (currently `send_email` via `browser.compose.*`). Remaining write
-   operations (`browser.messages.*`, `browser.calendar.*`) land in milestones 9-11.
+   `browser.*` APIs: `send_email` via `browser.compose.*`, message management via
+   `browser.messages.*`, and contact writes via `browser.contacts.*`/
+   `browser.addressBooks.*`. Calendar writes (`browser.calendar.*`) are blocked — see
+   D-010.
 3. **Local HTTP bridge** (`src/bridge.js`) — Express server, part of the MCP server
    process, bound to `127.0.0.1:8084` only (override with `BRIDGE_PORT`). Exposes
    `/health`, `/extension/heartbeat`, and the long-polling RPC endpoints
@@ -27,7 +29,8 @@
 - Milestone 7 (WebExtension scaffold + bridge) — done.
 - Milestone 8 (send path) — done.
 - Milestone 9 (message management) — done.
-- Milestones 10-11 (calendar/contact write) — not started.
+- Milestone 11 (contact write) — done.
+- Milestone 10 (calendar write) — blocked, see D-010.
 
 ## Modules
 
@@ -239,6 +242,35 @@ without Thunderbird running.
   Thunderbird's internal `MailFolder.path` convention (`list_folders` returns paths
   without a leading `/`, e.g. `"Archive"` or `"[Gmail]/All Mail"`).
 
+### Contact write path (milestone 11)
+
+`create_contact`/`update_contact` use `browser.contacts.create`/`browser.contacts.update`
+and `browser.addressBooks.list` (all stable, non-experimental WebExtension APIs — see
+D-010 for why this differs from calendar writes).
+
+- `create_contact` looks up the address book by `id` (a filename like `abook.sqlite`,
+  as returned by `list_address_books`) to get its `label`, then sends
+  `{ addressBookLabel, properties }` to the extension. `findAddressBookByLabel()` in
+  `background.js` calls `browser.addressBooks.list()` and matches on `name === label`,
+  then calls `browser.contacts.create(book.id, properties)`.
+- `update_contact` sends `{ cardId, properties }` directly — `browser.contacts.update`
+  takes a contact id with no address book context needed.
+- `properties` uses the legacy individual vCard-style field names
+  (`DisplayName`/`FirstName`/`LastName`/`PrimaryEmail`/`SecondEmail`), matching the
+  `properties` table columns `src/contacts.js` already reads.
+
+**Caveats**:
+- Matching address books by `name`/`label` assumes the WebExtension's
+  `AddressBookNode.name` equals the `description`/default-label string
+  `discoverAddressBooks()` produces. This holds for this profile (English locale) but
+  could diverge with localized default names ("Personal Address Book"/"Collected
+  Addresses") on a non-English Thunderbird install.
+- `update_contact`'s `cardId` is assumed to be the same UID as `browser.contacts`'
+  internal contact `id` (both ultimately the `properties.card` UUID stored in
+  `abook*.sqlite`). Not yet verified against a real write — if `browser.contacts.update`
+  rejects a `cardId` from `list_contacts` as "not found", this assumption needs
+  revisiting.
+
 ### Testing the bridge/extension
 
 `npm run test:tools` spawns its own `node src/index.js` with `BRIDGE_PORT=18084` (not
@@ -278,3 +310,7 @@ Cowork-wired instance directly (it already has the extension connected on `8084`
   extension.
 - `update_message_tags` — adds/removes tags on a message (by `id`). Requires the
   extension.
+- `create_contact` — creates a contact in an address book (by `id` from
+  `list_address_books`). Requires the extension.
+- `update_contact` — updates fields on an existing contact (by `cardId` from
+  `list_contacts`). Requires the extension.

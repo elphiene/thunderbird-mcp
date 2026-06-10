@@ -372,6 +372,78 @@ server.registerTool(
   }
 )
 
+server.registerTool(
+  'create_contact',
+  {
+    title: 'Create contact',
+    description: 'Creates a new contact in a Thunderbird address book. Requires the Thunderbird WebExtension to be connected — check bridge_status first.',
+    inputSchema: {
+      addressBook: z.string().describe('Address book id, as returned by list_address_books.'),
+      displayName: z.string().optional().describe('Display name.'),
+      firstName: z.string().optional().describe('First name.'),
+      lastName: z.string().optional().describe('Last name.'),
+      primaryEmail: z.string().email().optional().describe('Primary email address.'),
+      secondEmail: z.string().email().optional().describe('Secondary email address.'),
+    },
+  },
+  async ({ addressBook, displayName, firstName, lastName, primaryEmail, secondEmail }) => {
+    if (!displayName && !firstName && !lastName && !primaryEmail) {
+      return errorResult(new Error('create_contact requires at least one of displayName, firstName, lastName, or primaryEmail'))
+    }
+    try {
+      const ab = listAddressBooks().find((a) => a.id === addressBook)
+      if (!ab) throw new Error(`Unknown address book: ${addressBook}`)
+
+      const properties = {}
+      if (displayName) properties.DisplayName = displayName
+      if (firstName) properties.FirstName = firstName
+      if (lastName) properties.LastName = lastName
+      if (primaryEmail) properties.PrimaryEmail = primaryEmail
+      if (secondEmail) properties.SecondEmail = secondEmail
+
+      const result = await enqueueCommand(bridgeState, 'create_contact', { addressBookLabel: ab.label, properties })
+      return jsonResult(result)
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
+server.registerTool(
+  'update_contact',
+  {
+    title: 'Update contact',
+    description: 'Updates fields on an existing contact, identified by the cardId from list_contacts. Only the provided fields are changed. Requires the Thunderbird WebExtension to be connected — check bridge_status first.',
+    inputSchema: {
+      cardId: z.string().describe('The contact card id, as returned by list_contacts.'),
+      displayName: z.string().optional().describe('Display name.'),
+      firstName: z.string().optional().describe('First name.'),
+      lastName: z.string().optional().describe('Last name.'),
+      primaryEmail: z.string().email().optional().describe('Primary email address.'),
+      secondEmail: z.string().email().optional().describe('Secondary email address.'),
+    },
+  },
+  async ({ cardId, displayName, firstName, lastName, primaryEmail, secondEmail }) => {
+    const properties = {}
+    if (displayName !== undefined) properties.DisplayName = displayName
+    if (firstName !== undefined) properties.FirstName = firstName
+    if (lastName !== undefined) properties.LastName = lastName
+    if (primaryEmail !== undefined) properties.PrimaryEmail = primaryEmail
+    if (secondEmail !== undefined) properties.SecondEmail = secondEmail
+
+    if (Object.keys(properties).length === 0) {
+      return errorResult(new Error('update_contact requires at least one field to update'))
+    }
+
+    try {
+      const result = await enqueueCommand(bridgeState, 'update_contact', { cardId, properties })
+      return jsonResult(result)
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
 let bridgeState
 
 async function main() {

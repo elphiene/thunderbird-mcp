@@ -15,7 +15,9 @@ with the bundled WebExtension loaded (see below).
 - ✅ Calendar read path: list calendars, list events (requires Thunderbird closed)
 - ✅ Local HTTP bridge + WebExtension: heartbeat + send email
 - ✅ Message management: move, delete, mark read/unread, add/remove tags
-- ⏳ Contact and calendar writes — not yet implemented
+- ✅ Contact writes: create/update contacts
+- ❌ Calendar writes — blocked, no standard `browser.calendar` WebExtension API exists
+  (see `docs/DECISIONS.md` D-010); calendar remains read-only
 
 ## Setup
 
@@ -79,6 +81,8 @@ accounts" or "search my inbox for invoices".
 - `delete_message` — deletes a message, to Trash by default (requires the extension)
 - `set_message_read` — marks a message read or unread (requires the extension)
 - `update_message_tags` — adds/removes tags on a message (requires the extension)
+- `create_contact` — creates a contact in an address book (requires the extension)
+- `update_contact` — updates fields on an existing contact (requires the extension)
 
 See `docs/ARCHITECTURE.md` for how email parsing, message addressing, and the
 WebExtension bridge work, and `docs/BRIEF.md` for the full project scope and roadmap.
@@ -94,9 +98,10 @@ bridge. To load it:
    `curl http://127.0.0.1:8084/health`) — `extensionConnected` should become `true`
    within ~30 seconds.
 
-Once connected, `send_email` and the message management tools (`move_message`,
-`delete_message`, `set_message_read`, `update_message_tags`) are available.
-Calendar/contact write operations are not implemented yet.
+Once connected, `send_email`, the message management tools (`move_message`,
+`delete_message`, `set_message_read`, `update_message_tags`), and the contact write
+tools (`create_contact`, `update_contact`) are available. Calendar write operations
+are not implemented — see `docs/DECISIONS.md` D-010.
 
 ## Constraints
 
