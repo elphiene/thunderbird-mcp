@@ -83,3 +83,20 @@ schema, since this profile has no real cached events.
 **Trade-off:** `list_events` will return `[]` until Thunderbird has synced and cached
 at least one calendar locally — re-verify against real data once that happens, and
 revisit the PRTime/icalString assumptions if results look wrong.
+
+## D-007 · WebExtension manifest version: MV2
+
+**Decided:** 2026-06-10
+**Context:** Brief specified "Manifest V2 (Thunderbird 115 compatibility) — verify
+against installed version". Installed version is Thunderbird 140.11.0esr.
+**Decision:** `extension/manifest.json` uses `manifest_version: 2` with
+`strict_min_version: "115.0"`. Thunderbird 140 still supports MV2 (unlike Chrome/Firefox,
+Thunderbird has not removed MV2 support), and MV2's `background.scripts` + persistent
+background page model is simpler and better-documented for the `browser.messages.*` /
+`browser.compose.*` / `browser.addressBooks.*` APIs this project needs.
+**Why:** Avoids MV3's service-worker lifecycle complexity (no persistent background
+page, harder to maintain a heartbeat) for no compatibility benefit on this Thunderbird
+version.
+**Trade-off:** If a future Thunderbird release drops MV2 support, the extension will
+need a migration to MV3 (service worker + `browser.scripting`/`alarms` for the
+heartbeat instead of `setInterval`).

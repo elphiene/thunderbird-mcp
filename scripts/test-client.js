@@ -105,6 +105,17 @@ async function main() {
     if (!Array.isArray(events)) throw new Error('Expected list_events to return an array')
   }
 
+  // 9. bridge_status
+  const bridgeStatus = parseJsonResult(await client.callTool({ name: 'bridge_status', arguments: {} }))
+  console.log(`bridge_status: extensionConnected=${bridgeStatus.extensionConnected}, lastHeartbeat=${bridgeStatus.lastHeartbeat}`)
+  if (typeof bridgeStatus.extensionConnected !== 'boolean') throw new Error('Expected extensionConnected to be a boolean')
+
+  // 10. bridge /health endpoint (localhost-only HTTP bridge)
+  const bridgePort = process.env.BRIDGE_PORT || 8084
+  const health = await fetch(`http://127.0.0.1:${bridgePort}/health`).then((r) => r.json())
+  console.log(`bridge /health: status=${health.status}, extensionConnected=${health.extensionConnected}`)
+  if (health.status !== 'ok') throw new Error('Expected bridge /health to report status "ok"')
+
   await client.close()
   console.log('\nAll checks passed.')
 }

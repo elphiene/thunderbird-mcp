@@ -1,0 +1,26 @@
+{
+  "manifest_version": 2,
+  "name": "thunderbird-mcp bridge",
+  "version": "0.1.0",
+  "description": "Thin local bridge connecting Thunderbird to the thunderbird-mcp MCP server. All logic lives in the MCP server; this extension only relays browser.* API calls over a localhost-only HTTP connection.",
+  "applications": {
+    "gecko": {
+      "id": "bridge@thunderbird-mcp.elphiene",
+      "strict_min_version": "115.0"
+    }
+  },
+  "permissions": [
+    "accountsRead",
+    "messagesRead",
+    "messagesMove",
+    "messagesDelete",
+    "messagesTags",
+    "compose",
+    "addressBooks",
+    "contacts",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  }
+}

@@ -10,17 +10,21 @@
      `calendar-data/*.sqlite` for calendar.
    - **Write/send/manage path** (future): talks to the Thunderbird WebExtension over a
      local-only HTTP bridge.
-2. **Thunderbird WebExtension** (future) — thin localhost HTTP API shim for write
-   operations (`browser.compose.*`, `browser.messages.*`, `browser.calendar.*`).
-3. **Local HTTP bridge** (future) — Express server, part of the MCP server process,
-   localhost-only, port 8084.
+2. **Thunderbird WebExtension** (`extension/`, scaffolded) — thin shim. Currently just
+   sends a periodic heartbeat with the account list; write operations
+   (`browser.compose.*`, `browser.messages.*`, `browser.calendar.*`) land in
+   milestones 8-11.
+3. **Local HTTP bridge** (`src/bridge.js`) — Express server, part of the MCP server
+   process, bound to `127.0.0.1:8084` only (override with `BRIDGE_PORT`). Currently
+   exposes `/health` and `/extension/heartbeat`.
 
 ## Current implementation status
 
 - Milestones 1-3 (scaffold, profile discovery, email read path) — done.
 - Milestone 4 (contacts read path) — done.
 - Milestone 5 (calendar read path) — done.
-- Milestones 7+ (WebExtension, write paths) — not started.
+- Milestone 7 (WebExtension scaffold + bridge) — done.
+- Milestones 8-11 (send, message management, calendar/contact write) — not started.
 
 ## Modules
 
@@ -35,7 +39,12 @@
   `abook*.sqlite`/`history.sqlite` via `sqlite3`.
 - `src/calendar.js` — calendar discovery (from `prefs.js`) and event listing, reading
   `calendar-data/local.sqlite` via `sqlite3`.
-- `src/index.js` — MCP server entrypoint, registers tools and connects over stdio.
+- `src/bridge.js` — local-only Express HTTP bridge (`127.0.0.1:8084`) for the
+  WebExtension to talk to.
+- `src/index.js` — MCP server entrypoint, registers tools, connects over stdio, and
+  starts the bridge.
+- `extension/` — Thunderbird WebExtension (Manifest V2): `manifest.json` +
+  `background.js`, currently just a heartbeat shim.
 
 ## Email read path
 
@@ -126,6 +135,29 @@ calendar has an `id` (the registry UUID), `name`, `type` (`storage` for the loca
 
 See `docs/DECISIONS.md` (D-006) for how this was verified.
 
+## WebExtension + bridge (scaffold)
+
+`src/bridge.js` starts an Express server bound to `127.0.0.1:8084` (override via
+`BRIDGE_PORT`) alongside the MCP stdio server. It currently exposes:
+
+- `GET /health` — `{ status, extensionConnected, lastHeartbeat }`.
+- `POST /extension/heartbeat` — called by the extension's background script every 30s
+  with `{ accounts: [{ id, name, type }] }`. The bridge considers the extension
+  "connected" if a heartbeat was received in the last 60 seconds.
+
+`extension/` is a Manifest V2 WebExtension (`strict_min_version: "115.0"`,
+matches the installed Thunderbird 140 ESR — MV2 remains supported). Its
+`background.js` does nothing but heartbeat for now; all real logic
+(`browser.compose.*`, `browser.messages.*`, etc.) will be added in milestones 8-11,
+keeping the extension itself a thin shim per the brief's constraints.
+
+To load it in Thunderbird: Settings → General → (scroll to) "Add-ons and Themes" →
+gear icon → "Debug Add-ons" → "Load Temporary Add-on" → select
+`extension/manifest.json`. Check the Browser Console for errors.
+
+**Security**: the bridge binds to `127.0.0.1` explicitly (not `0.0.0.0`) — never expose
+this port via a tunnel or reverse proxy.
+
 ## Tools
 
 - `list_accounts` — lists configured Thunderbird accounts (email, display name,
@@ -140,3 +172,5 @@ See `docs/DECISIONS.md` (D-006) for how this was verified.
 - `list_calendars` — lists configured calendars (name, type, color, account).
 - `list_events` — lists events from the local calendar cache, filtered by calendar
   and/or date range. Requires Thunderbird to be closed.
+- `bridge_status` — reports whether the Thunderbird WebExtension is currently
+  connected to the local HTTP bridge.

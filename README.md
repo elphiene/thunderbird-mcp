@@ -12,8 +12,9 @@ files and does **not** require Thunderbird to be running.
 - ✅ Email read path: list accounts/folders, search emails, read full messages
 - ✅ Contacts read path: list address books, list/search contacts
 - ✅ Calendar read path: list calendars, list events (requires Thunderbird closed)
-- ⏳ Send/manage email, contact and calendar writes (via a Thunderbird WebExtension) —
-  not yet implemented
+- ✅ Local HTTP bridge + WebExtension scaffold (heartbeat only)
+- ⏳ Send/manage email, contact and calendar writes (via the WebExtension) — not yet
+  implemented
 
 ## Setup
 
@@ -69,12 +70,28 @@ accounts" or "search my inbox for invoices".
 - `list_calendars` — lists configured calendars
 - `list_events` — lists calendar events by calendar/date range (requires Thunderbird
   to be closed)
+- `bridge_status` — reports whether the Thunderbird WebExtension is connected
 
-See `docs/ARCHITECTURE.md` for how email parsing and message addressing work, and
-`docs/BRIEF.md` for the full project scope and roadmap.
+See `docs/ARCHITECTURE.md` for how email parsing, message addressing, and the
+WebExtension bridge work, and `docs/BRIEF.md` for the full project scope and roadmap.
+
+## WebExtension (scaffold)
+
+`extension/` is a Manifest V2 Thunderbird WebExtension that connects to the local
+bridge. To load it:
+
+1. In Thunderbird: Settings → General → "Add-ons and Themes" → gear icon →
+   "Debug Add-ons" → "Load Temporary Add-on" → select `extension/manifest.json`.
+2. With `npm start` running, call the `bridge_status` tool (or
+   `curl http://127.0.0.1:8084/health`) — `extensionConnected` should become `true`
+   within ~30 seconds.
+
+It currently only sends a heartbeat; send/manage/write operations are not implemented
+yet.
 
 ## Constraints
 
-- Local only — no network exposure, no Cloudflare tunnel
+- Local only — no network exposure, no Cloudflare tunnel. The bridge binds to
+  `127.0.0.1:8084` (override with `BRIDGE_PORT`) and must never be tunneled.
 - `sqlite3`, not `better-sqlite3` (required for Node v24 compatibility)
 - `THUNDERBIRD_PROFILE` must be set via environment variable — never hardcoded

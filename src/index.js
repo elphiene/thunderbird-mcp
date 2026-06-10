@@ -7,6 +7,9 @@ import { getProfileDir, listAccounts, listFolders } from './profile.js'
 import { searchEmails, readEmail } from './email.js'
 import { listAddressBooks, listContacts } from './contacts.js'
 import { listCalendars, listEvents } from './calendar.js'
+import { startBridge, getBridgeStatus } from './bridge.js'
+
+const BRIDGE_PORT = Number(process.env.BRIDGE_PORT) || 8084
 
 const server = new McpServer({
   name: 'thunderbird-mcp',
@@ -194,10 +197,31 @@ server.registerTool(
   }
 )
 
+server.registerTool(
+  'bridge_status',
+  {
+    title: 'Bridge status',
+    description: 'Reports whether the Thunderbird WebExtension is connected to the local HTTP bridge (required for send/manage/write operations).',
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      return jsonResult(getBridgeStatus(bridgeState))
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
+let bridgeState
+
 async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)
   console.error('thunderbird-mcp running on stdio')
+
+  const bridge = startBridge(BRIDGE_PORT)
+  bridgeState = bridge.state
 }
 
 main().catch((error) => {
