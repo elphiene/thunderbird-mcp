@@ -138,3 +138,30 @@ to compose-only avoids blocking milestone 8 on an unverified message-id-mapping 
 **Trade-off:** Long-polling holds one open connection per idle extension instance and
 adds up to ~25s of poll-cycle latency in the worst case (negligible for interactive
 use). Reply/reply-all remain unimplemented until the message-id mapping is designed.
+
+## D-009 · Message management addressing: resolve mbox id → headerMessageId at call time
+
+**Decided:** 2026-06-10
+**Context:** Milestone 9 (`move_message`, `delete_message`, `set_message_read`,
+`update_message_tags`) needs to act on messages identified by the same opaque `id`
+`search_emails`/`read_email` already return — an mbox `{absPath, offset}` reference
+(D-005). `browser.messages.*` instead addresses messages by Thunderbird's internal
+numeric message id, which the mbox-based `id` doesn't carry.
+**Decision:** Each management tool calls `getMessageRef({id})` in the MCP server
+(header-only read, no extension needed) to get `{accountId, folderPath,
+headerMessageId}` — `accountId`/`folderPath` from `findFolderByAbsPath()` matching the
+mbox file, `headerMessageId` from the `Message-ID` header. This is sent to the
+extension, which calls `browser.messages.query({folder: {accountId, path:
+'/'+folderPath}, headerMessageId})` to recover the live message and then performs the
+operation.
+**Why:** Avoids redesigning the `id` format or adding a persistent id-mapping cache;
+`Message-ID` is a stable, near-universally-present identifier, and scoping the query to
+the message's last-known folder keeps it cheap. This also reuses the exact mechanism
+flagged as the blocker for reply/reply-all in D-008 — if it proves reliable here, it's
+a strong signal reply support could use the same approach.
+**Trade-off:** A message with no `Message-ID` header (rare, but possible for some
+locally-generated mail) can't be targeted. If a message has moved/been deleted since
+the `id` was issued, the extension's query finds nothing and returns a "not found"
+error — the caller must re-`search_emails` for a fresh `id`. `update_message_tags`
+takes `addTags`/`removeTags` (not a full replace) to avoid a separate "get current
+tags" round trip from the MCP server.

@@ -3,8 +3,8 @@ import 'dotenv/config'
 import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { getProfileDir, listAccounts, listFolders } from './profile.js'
-import { searchEmails, readEmail } from './email.js'
+import { getProfileDir, listAccounts, listFolders, listTags } from './profile.js'
+import { searchEmails, readEmail, getMessageRef } from './email.js'
 import { listAddressBooks, listContacts } from './contacts.js'
 import { listCalendars, listEvents } from './calendar.js'
 import { startBridge, getBridgeStatus, enqueueCommand } from './bridge.js'
@@ -123,6 +123,22 @@ server.registerTool(
 )
 
 server.registerTool(
+  'list_tags',
+  {
+    title: 'List message tags',
+    description: 'Lists configured Thunderbird message tags/labels (e.g. Important, Work) with their keys and colors. Tag keys are used by update_message_tags.',
+    inputSchema: {},
+  },
+  async () => {
+    try {
+      return jsonResult(listTags(getProfileDir()))
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
+server.registerTool(
   'list_address_books',
   {
     title: 'List address books',
@@ -231,6 +247,124 @@ server.registerTool(
   async (args) => {
     try {
       const result = await enqueueCommand(bridgeState, 'send_email', args)
+      return jsonResult(result)
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
+server.registerTool(
+  'move_message',
+  {
+    title: 'Move email to another folder',
+    description: 'Moves an email (identified by the id from search_emails/read_email) to another folder, optionally in a different account. Requires the Thunderbird WebExtension to be connected — check bridge_status first.',
+    inputSchema: {
+      id: z.string().describe('The opaque message id returned by search_emails.'),
+      destFolderPath: z.string().describe('Destination folder path, as returned by list_folders (e.g. "Archive" or "[Gmail]/All Mail").'),
+      destAccountEmail: z.string().email().optional().describe('Destination account email, as returned by list_accounts. Defaults to the message\'s current account.'),
+    },
+  },
+  async ({ id, destFolderPath, destAccountEmail }) => {
+    try {
+      const ref = await getMessageRef({ id })
+      const accounts = listAccounts(getProfileDir())
+      const destAccount = destAccountEmail
+        ? accounts.find((a) => a.email === destAccountEmail)
+        : accounts.find((a) => a.accountId === ref.accountId)
+      if (!destAccount) {
+        throw new Error(`Unknown destination account: ${destAccountEmail ?? ref.accountId}`)
+      }
+      const result = await enqueueCommand(bridgeState, 'move_message', {
+        accountId: ref.accountId,
+        folderPath: ref.folderPath,
+        headerMessageId: ref.headerMessageId,
+        destAccountId: destAccount.accountId,
+        destFolderPath,
+      })
+      return jsonResult(result)
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
+server.registerTool(
+  'delete_message',
+  {
+    title: 'Delete email',
+    description: 'Deletes an email (identified by the id from search_emails/read_email). By default moves it to Trash; set permanent to bypass Trash. Requires the Thunderbird WebExtension to be connected — check bridge_status first.',
+    inputSchema: {
+      id: z.string().describe('The opaque message id returned by search_emails.'),
+      permanent: z.boolean().optional().describe('If true, permanently deletes instead of moving to Trash. Default false.'),
+    },
+  },
+  async ({ id, permanent }) => {
+    try {
+      const ref = await getMessageRef({ id })
+      const result = await enqueueCommand(bridgeState, 'delete_message', {
+        accountId: ref.accountId,
+        folderPath: ref.folderPath,
+        headerMessageId: ref.headerMessageId,
+        permanent: !!permanent,
+      })
+      return jsonResult(result)
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
+server.registerTool(
+  'set_message_read',
+  {
+    title: 'Mark email read/unread',
+    description: 'Marks an email (identified by the id from search_emails/read_email) as read or unread. Requires the Thunderbird WebExtension to be connected — check bridge_status first.',
+    inputSchema: {
+      id: z.string().describe('The opaque message id returned by search_emails.'),
+      read: z.boolean().describe('true to mark as read, false to mark as unread.'),
+    },
+  },
+  async ({ id, read }) => {
+    try {
+      const ref = await getMessageRef({ id })
+      const result = await enqueueCommand(bridgeState, 'set_message_read', {
+        accountId: ref.accountId,
+        folderPath: ref.folderPath,
+        headerMessageId: ref.headerMessageId,
+        read,
+      })
+      return jsonResult(result)
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
+server.registerTool(
+  'update_message_tags',
+  {
+    title: 'Add/remove email tags',
+    description: 'Adds and/or removes tags/labels on an email (identified by the id from search_emails/read_email). Use list_tags for available tag keys. Requires the Thunderbird WebExtension to be connected — check bridge_status first.',
+    inputSchema: {
+      id: z.string().describe('The opaque message id returned by search_emails.'),
+      addTags: z.array(z.string()).optional().describe('Tag keys to add, as returned by list_tags.'),
+      removeTags: z.array(z.string()).optional().describe('Tag keys to remove, as returned by list_tags.'),
+    },
+  },
+  async ({ id, addTags, removeTags }) => {
+    if (!addTags?.length && !removeTags?.length) {
+      return errorResult(new Error('update_message_tags requires at least one of addTags or removeTags'))
+    }
+    try {
+      const ref = await getMessageRef({ id })
+      const result = await enqueueCommand(bridgeState, 'update_message_tags', {
+        accountId: ref.accountId,
+        folderPath: ref.folderPath,
+        headerMessageId: ref.headerMessageId,
+        addTags: addTags ?? [],
+        removeTags: removeTags ?? [],
+      })
       return jsonResult(result)
     } catch (error) {
       return errorResult(error)

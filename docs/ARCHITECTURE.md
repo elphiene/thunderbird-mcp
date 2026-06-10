@@ -26,17 +26,21 @@
 - Milestone 5 (calendar read path) — done.
 - Milestone 7 (WebExtension scaffold + bridge) — done.
 - Milestone 8 (send path) — done.
-- Milestones 9-11 (message management, calendar/contact write) — not started.
+- Milestone 9 (message management) — done.
+- Milestones 10-11 (calendar/contact write) — not started.
 
 ## Modules
 
 - `src/profile.js` — locates the Thunderbird profile (`THUNDERBIRD_PROFILE` env var),
-  parses `prefs.js` for account/server/identity/calendar info, enumerates accounts and
-  their mbox folder trees.
+  parses `prefs.js` for account/server/identity/calendar/tag info, enumerates accounts
+  and their mbox folder trees, and resolves a folder for a given mbox file path
+  (`findFolderByAbsPath`, used by message management).
 - `src/mbox.js` — low-level mbox file splitter. Streams a mailbox file and yields raw
   RFC822 message bytes plus byte offsets, with `>From` unescaping.
 - `src/email.js` — structured email parsing (via `mailparser`) and search, built on
-  `profile.js` + `mbox.js`.
+  `profile.js` + `mbox.js`. Also resolves an opaque message `id` to the
+  `{accountId, folderPath, headerMessageId}` reference used by message management
+  (`getMessageRef`).
 - `src/contacts.js` — address book discovery and contact listing/search, reading
   `abook*.sqlite`/`history.sqlite` via `sqlite3`.
 - `src/calendar.js` — calendar discovery (from `prefs.js`) and event listing, reading
@@ -194,6 +198,47 @@ If no identity matches `fromEmail`, it throws before composing anything.
 `scripts/test-client.js` for the safe error-path test (an invalid `fromEmail` that the
 extension rejects before composing).
 
+### Message management (milestone 9)
+
+`move_message`, `delete_message`, `set_message_read`, and `update_message_tags` all
+take the same opaque `id` as `read_email`/`search_emails` (an mbox `{absPath, offset}`
+reference, D-005). Since `browser.messages.*` addresses messages by Thunderbird's
+internal numeric message id, not mbox offsets, each tool first calls
+`getMessageRef({id})` (`src/email.js`) — a cheap header-only read that returns
+`{accountId, folderPath, headerMessageId}` (the account/folder come from
+`findFolderByAbsPath()` matching the mbox file's path; `headerMessageId` is the
+`Message-ID` header). This happens entirely in the MCP server and works even if the
+extension is offline (errors fast via `enqueueCommand`'s connectivity check).
+
+The resulting `{accountId, folderPath, headerMessageId, ...}` payload is sent to the
+extension, where `findMessage()` calls
+`browser.messages.query({ folder: { accountId, path: '/'+folderPath }, headerMessageId
+})` to recover the live `MessageHeader`, then:
+
+- `move_message` → `browser.messages.move([msg.id], { accountId: destAccountId, path:
+  '/'+destFolderPath })`. `destAccountId` defaults to the source account, resolved from
+  `destAccountEmail` via `listAccounts()` if given.
+- `delete_message` → `browser.messages.delete([msg.id], permanent)` (default
+  `permanent: false`, i.e. moves to Trash).
+- `set_message_read` → `browser.messages.update(msg.id, { read })`.
+- `update_message_tags` → reads `msg.tags`, applies `addTags`/`removeTags` (tag keys —
+  see `list_tags`), then `browser.messages.update(msg.id, { tags })`.
+
+`list_tags` is a pure read-path tool (`src/profile.js`'s `listTags()`) parsing
+`mailnews.tags.<key>.tag`/`.color` from `prefs.js` — works without the extension and
+without Thunderbird running.
+
+**Caveats**:
+- If a message has no `Message-ID` header, `getMessageRef()` throws before any RPC —
+  these tools can't target it.
+- If the message has moved/been deleted since the `id` was issued (e.g. by a previous
+  `move_message`/`delete_message` call, or by Thunderbird itself), `findMessage()`
+  finds nothing and the extension returns a "Message not found" error — re-run
+  `search_emails` to get a fresh `id`.
+- A folder path used as `destFolderPath`/`folderPath` is prefixed with `/` to match
+  Thunderbird's internal `MailFolder.path` convention (`list_folders` returns paths
+  without a leading `/`, e.g. `"Archive"` or `"[Gmail]/All Mail"`).
+
 ### Testing the bridge/extension
 
 `npm run test:tools` spawns its own `node src/index.js` with `BRIDGE_PORT=18084` (not
@@ -223,3 +268,13 @@ Cowork-wired instance directly (it already has the extension connected on `8084`
 - `send_email` — composes and sends a new email from a connected account via the
   WebExtension (`browser.compose.*`). Requires the extension to be connected — check
   `bridge_status` first.
+- `list_tags` — lists configured message tags/labels (key, name, color) from
+  `prefs.js`. Read-only, no extension needed.
+- `move_message` — moves a message (by `id`) to another folder/account. Requires the
+  extension.
+- `delete_message` — deletes a message (by `id`), to Trash by default. Requires the
+  extension.
+- `set_message_read` — marks a message (by `id`) read or unread. Requires the
+  extension.
+- `update_message_tags` — adds/removes tags on a message (by `id`). Requires the
+  extension.

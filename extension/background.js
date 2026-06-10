@@ -60,12 +60,62 @@ async function executeCommand(command) {
     switch (command.type) {
       case 'send_email':
         return { ok: true, result: await sendEmail(command.payload) }
+      case 'move_message':
+        return { ok: true, result: await moveMessage(command.payload) }
+      case 'delete_message':
+        return { ok: true, result: await deleteMessage(command.payload) }
+      case 'set_message_read':
+        return { ok: true, result: await setMessageRead(command.payload) }
+      case 'update_message_tags':
+        return { ok: true, result: await updateMessageTags(command.payload) }
       default:
         return { ok: false, error: `Unknown command type: ${command.type}` }
     }
   } catch (error) {
     return { ok: false, error: error?.message || String(error) }
   }
+}
+
+// Resolves a message identified by (accountId, folderPath, headerMessageId) —
+// the addressing scheme used by the MCP server's mbox-based message ids — to
+// the WebExtension's internal MessageHeader.
+async function findMessage({ accountId, folderPath, headerMessageId }) {
+  const { messages } = await browser.messages.query({
+    folder: { accountId, path: `/${folderPath}` },
+    headerMessageId,
+  })
+  if (!messages.length) {
+    throw new Error(`Message not found in /${folderPath} (it may have been moved or deleted)`)
+  }
+  return messages[0]
+}
+
+async function moveMessage({ accountId, folderPath, headerMessageId, destAccountId, destFolderPath }) {
+  const message = await findMessage({ accountId, folderPath, headerMessageId })
+  await browser.messages.move([message.id], { accountId: destAccountId, path: `/${destFolderPath}` })
+  return { moved: true }
+}
+
+async function deleteMessage({ accountId, folderPath, headerMessageId, permanent = false }) {
+  const message = await findMessage({ accountId, folderPath, headerMessageId })
+  await browser.messages.delete([message.id], permanent)
+  return { deleted: true, permanent }
+}
+
+async function setMessageRead({ accountId, folderPath, headerMessageId, read }) {
+  const message = await findMessage({ accountId, folderPath, headerMessageId })
+  await browser.messages.update(message.id, { read })
+  return { read }
+}
+
+async function updateMessageTags({ accountId, folderPath, headerMessageId, addTags = [], removeTags = [] }) {
+  const message = await findMessage({ accountId, folderPath, headerMessageId })
+  const tags = new Set(message.tags || [])
+  for (const tag of addTags) tags.add(tag)
+  for (const tag of removeTags) tags.delete(tag)
+  const result = [...tags]
+  await browser.messages.update(message.id, { tags: result })
+  return { tags: result }
 }
 
 async function sendEmail({ fromEmail, to, cc, bcc, subject, body, isPlainText = true }) {

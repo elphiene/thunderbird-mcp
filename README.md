@@ -14,8 +14,8 @@ with the bundled WebExtension loaded (see below).
 - ✅ Contacts read path: list address books, list/search contacts
 - ✅ Calendar read path: list calendars, list events (requires Thunderbird closed)
 - ✅ Local HTTP bridge + WebExtension: heartbeat + send email
-- ⏳ Message management (move/delete/tag) and contact/calendar writes — not yet
-  implemented
+- ✅ Message management: move, delete, mark read/unread, add/remove tags
+- ⏳ Contact and calendar writes — not yet implemented
 
 ## Setup
 
@@ -74,6 +74,11 @@ accounts" or "search my inbox for invoices".
 - `bridge_status` — reports whether the Thunderbird WebExtension is connected
 - `send_email` — composes and sends a new email from a connected account (requires
   Thunderbird running with the extension loaded; check `bridge_status` first)
+- `list_tags` — lists configured message tags/labels (key, name, color)
+- `move_message` — moves a message to another folder/account (requires the extension)
+- `delete_message` — deletes a message, to Trash by default (requires the extension)
+- `set_message_read` — marks a message read or unread (requires the extension)
+- `update_message_tags` — adds/removes tags on a message (requires the extension)
 
 See `docs/ARCHITECTURE.md` for how email parsing, message addressing, and the
 WebExtension bridge work, and `docs/BRIEF.md` for the full project scope and roadmap.
@@ -89,8 +94,9 @@ bridge. To load it:
    `curl http://127.0.0.1:8084/health`) — `extensionConnected` should become `true`
    within ~30 seconds.
 
-Once connected, `send_email` is available. Message management (move/delete/tag) and
-calendar/contact write operations are not implemented yet.
+Once connected, `send_email` and the message management tools (`move_message`,
+`delete_message`, `set_message_read`, `update_message_tags`) are available.
+Calendar/contact write operations are not implemented yet.
 
 ## Constraints
 

@@ -1,6 +1,6 @@
 import { simpleParser } from 'mailparser'
 import { iterateMboxMessages, readMessageAt } from './mbox.js'
-import { getProfileDir, enumerateAllFolders } from './profile.js'
+import { getProfileDir, enumerateAllFolders, findFolderByAbsPath } from './profile.js'
 
 const SNIPPET_LENGTH = 200
 
@@ -150,4 +150,38 @@ export async function readEmail({ id }) {
   const { absPath, offset } = decodeId(id)
   const raw = await readMessageAt(absPath, offset)
   return parseMessage(raw)
+}
+
+/**
+ * Resolves an opaque message id to the identifying information the
+ * WebExtension needs to find the message via browser.messages.query():
+ * the account/folder it currently lives in (per the local mbox copy) plus
+ * its Message-ID header. Used by move/delete/tag management tools.
+ *
+ * Note: if the message has already been moved/deleted since the id was
+ * issued, this still resolves based on the *original* mbox location —
+ * the extension's query may then find nothing, which surfaces as a clear
+ * "message not found" error from the bridge.
+ */
+export async function getMessageRef({ id }) {
+  const { absPath, offset } = decodeId(id)
+  const raw = await readMessageAt(absPath, offset)
+  const headers = extractHeaders(raw)
+  const headerMessageId = headers['message-id'] || null
+  if (!headerMessageId) {
+    throw new Error('This message has no Message-ID header — it cannot be targeted by management operations.')
+  }
+
+  const folder = findFolderByAbsPath(getProfileDir(), absPath)
+  if (!folder) {
+    throw new Error('Could not resolve the account/folder for this message.')
+  }
+
+  return {
+    accountId: folder.accountId,
+    accountEmail: folder.accountEmail,
+    folderPath: folder.folderPath,
+    headerMessageId,
+    subject: headers.subject || null,
+  }
 }

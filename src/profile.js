@@ -8,6 +8,7 @@ const PREFS_PREFIXES = [
   'mail.accountmanager.accounts',
   'ldap_2.servers.',
   'calendar.registry.',
+  'mailnews.tags.',
 ]
 
 /**
@@ -178,4 +179,36 @@ function flatten(folders, account, out) {
     })
     if (folder.children.length) flatten(folder.children, account, out)
   }
+}
+
+/**
+ * Looks up the account/folder a message's mbox file belongs to, for use by
+ * message management tools (move/delete/tag) which need to address the
+ * message via the WebExtension's accountId + folder path.
+ */
+export function findFolderByAbsPath(profileDir, absPath) {
+  return enumerateAllFolders(profileDir).find((f) => f.absPath === absPath) ?? null
+}
+
+/**
+ * Lists configured message tags/labels (mailnews.tags.<key>.tag/.color in
+ * prefs.js) — the same tags shown in Thunderbird's tag picker. `key` is what
+ * browser.messages.update({tags}) expects.
+ */
+export function listTags(profileDir) {
+  const prefs = parsePrefsJs(profileDir)
+  const keys = new Set()
+
+  for (const key of prefs.keys()) {
+    const match = /^mailnews\.tags\.([^.]+)\.tag$/.exec(key)
+    if (match) keys.add(match[1])
+  }
+
+  return [...keys]
+    .map((key) => ({
+      key,
+      name: prefs.get(`mailnews.tags.${key}.tag`) ?? key,
+      color: prefs.get(`mailnews.tags.${key}.color`) ?? null,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name))
 }

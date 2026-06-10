@@ -81,6 +81,11 @@ async function main() {
   if (!noFilterResult.isError) throw new Error('Expected search_emails with no filters to error')
   console.log('search_emails with no filters: correctly rejected')
 
+  // 4b. list_tags
+  const tags = parseJsonResult(await client.callTool({ name: 'list_tags', arguments: {} }))
+  console.log(`list_tags: ${tags.length} tag(s)`)
+  if (!Array.isArray(tags)) throw new Error('Expected list_tags to return an array')
+
   // 5. list_address_books
   const addressBooks = parseJsonResult(await client.callTool({ name: 'list_address_books', arguments: {} }))
   console.log(`list_address_books: ${addressBooks.length} address book(s)`)
@@ -146,6 +151,53 @@ async function main() {
     console.log(`send_email (unknown fromEmail): correctly rejected — ${sendResult.content[0]?.text}`)
   } else {
     console.log('send_email: skipped (extension not connected)')
+  }
+
+  // 12. message management tools — only check the "extension not connected" error
+  // path. This still exercises getMessageRef() (decoding the id, finding the
+  // Message-ID header and owning account/folder) without ever reaching the
+  // extension, so it's safe to run against a real message id.
+  if (searchResults.length && !bridgeStatus.extensionConnected) {
+    const targetId = searchResults[0].id
+
+    const moveResult = await client.callTool({
+      name: 'move_message',
+      arguments: { id: targetId, destFolderPath: 'Archive' },
+    })
+    if (!moveResult.isError) throw new Error('Expected move_message to error when extension is not connected')
+    console.log(`move_message (not connected): correctly rejected — ${moveResult.content[0]?.text}`)
+
+    const deleteResult = await client.callTool({
+      name: 'delete_message',
+      arguments: { id: targetId },
+    })
+    if (!deleteResult.isError) throw new Error('Expected delete_message to error when extension is not connected')
+    console.log(`delete_message (not connected): correctly rejected — ${deleteResult.content[0]?.text}`)
+
+    const readResult = await client.callTool({
+      name: 'set_message_read',
+      arguments: { id: targetId, read: true },
+    })
+    if (!readResult.isError) throw new Error('Expected set_message_read to error when extension is not connected')
+    console.log(`set_message_read (not connected): correctly rejected — ${readResult.content[0]?.text}`)
+
+    const tagsResult = await client.callTool({
+      name: 'update_message_tags',
+      arguments: { id: targetId, addTags: ['$label1'] },
+    })
+    if (!tagsResult.isError) throw new Error('Expected update_message_tags to error when extension is not connected')
+    console.log(`update_message_tags (not connected): correctly rejected — ${tagsResult.content[0]?.text}`)
+
+    // update_message_tags with neither addTags nor removeTags should be rejected
+    // before even attempting to resolve the message.
+    const noTagsResult = await client.callTool({
+      name: 'update_message_tags',
+      arguments: { id: targetId },
+    })
+    if (!noTagsResult.isError) throw new Error('Expected update_message_tags with no tags to error')
+    console.log('update_message_tags with no addTags/removeTags: correctly rejected')
+  } else {
+    console.log('message management tools: skipped (no search results, or extension connected)')
   }
 
   await client.close()
