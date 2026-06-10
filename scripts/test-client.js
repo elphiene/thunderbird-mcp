@@ -17,10 +17,20 @@ function parseJsonResult(result) {
   return JSON.parse(result.content[0].text)
 }
 
+// Use a dedicated bridge port for the test run so this process's own bridge can
+// bind successfully even if a persistent thunderbird-mcp instance (e.g. wired into
+// Claude Desktop/Cowork) is already holding the default port. The real extension only
+// connects to the default port, so bridge_status/send_email here will correctly
+// report "not connected" — that's expected, not a bug. To exercise send_email
+// end-to-end, use the persistent instance (e.g. ask Claude in Cowork to send a test
+// email) which has the real extension connection.
+const TEST_BRIDGE_PORT = process.env.BRIDGE_PORT || '18084'
+
 async function main() {
   const transport = new StdioClientTransport({
     command: 'node',
     args: [serverPath],
+    env: { ...process.env, BRIDGE_PORT: TEST_BRIDGE_PORT },
   })
 
   const client = new Client({ name: 'thunderbird-mcp-test-client', version: '0.0.1' })
@@ -77,17 +87,22 @@ async function main() {
   if (!addressBooks.length) throw new Error('Expected at least one address book')
 
   // 6. list_contacts
-  const contacts = parseJsonResult(await client.callTool({ name: 'list_contacts', arguments: { limit: 200 } }))
-  console.log(`list_contacts: ${contacts.length} contact(s), ${contacts.filter((c) => c.emails.length).length} with email`)
-  if (!Array.isArray(contacts)) throw new Error('Expected list_contacts to return an array')
+  const contactsResult = await client.callTool({ name: 'list_contacts', arguments: { limit: 200 } })
+  if (contactsResult.isError) {
+    console.log(`list_contacts: error (expected if Thunderbird is mid-sync) — ${contactsResult.content[0]?.text}`)
+  } else {
+    const contacts = JSON.parse(contactsResult.content[0].text)
+    console.log(`list_contacts: ${contacts.length} contact(s), ${contacts.filter((c) => c.emails.length).length} with email`)
+    if (!Array.isArray(contacts)) throw new Error('Expected list_contacts to return an array')
 
-  // list_contacts scoped to a single address book
-  const scopedContacts = parseJsonResult(
-    await client.callTool({ name: 'list_contacts', arguments: { addressBook: addressBooks[0].id, limit: 200 } })
-  )
-  console.log(`list_contacts (scoped to ${addressBooks[0].id}): ${scopedContacts.length} contact(s)`)
-  if (!scopedContacts.every((c) => c.addressBook === addressBooks[0].id)) {
-    throw new Error('Expected scoped contacts to all belong to the requested address book')
+    // list_contacts scoped to a single address book
+    const scopedContacts = parseJsonResult(
+      await client.callTool({ name: 'list_contacts', arguments: { addressBook: addressBooks[0].id, limit: 200 } })
+    )
+    console.log(`list_contacts (scoped to ${addressBooks[0].id}): ${scopedContacts.length} contact(s)`)
+    if (!scopedContacts.every((c) => c.addressBook === addressBooks[0].id)) {
+      throw new Error('Expected scoped contacts to all belong to the requested address book')
+    }
   }
 
   // 7. list_calendars
@@ -111,10 +126,27 @@ async function main() {
   if (typeof bridgeStatus.extensionConnected !== 'boolean') throw new Error('Expected extensionConnected to be a boolean')
 
   // 10. bridge /health endpoint (localhost-only HTTP bridge)
-  const bridgePort = process.env.BRIDGE_PORT || 8084
-  const health = await fetch(`http://127.0.0.1:${bridgePort}/health`).then((r) => r.json())
+  const health = await fetch(`http://127.0.0.1:${TEST_BRIDGE_PORT}/health`).then((r) => r.json())
   console.log(`bridge /health: status=${health.status}, extensionConnected=${health.extensionConnected}`)
   if (health.status !== 'ok') throw new Error('Expected bridge /health to report status "ok"')
+
+  // 11. send_email — only if extension connected; use a fromEmail that matches no
+  // identity so the extension rejects it before composing/sending anything real.
+  if (bridgeStatus.extensionConnected) {
+    const sendResult = await client.callTool({
+      name: 'send_email',
+      arguments: {
+        fromEmail: 'not-a-real-account@example.invalid',
+        to: ['test@example.invalid'],
+        subject: 'thunderbird-mcp test (should not send)',
+        body: 'test',
+      },
+    })
+    if (!sendResult.isError) throw new Error('Expected send_email with an unknown fromEmail to error')
+    console.log(`send_email (unknown fromEmail): correctly rejected — ${sendResult.content[0]?.text}`)
+  } else {
+    console.log('send_email: skipped (extension not connected)')
+  }
 
   await client.close()
   console.log('\nAll checks passed.')

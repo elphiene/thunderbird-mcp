@@ -7,7 +7,7 @@ import { getProfileDir, listAccounts, listFolders } from './profile.js'
 import { searchEmails, readEmail } from './email.js'
 import { listAddressBooks, listContacts } from './contacts.js'
 import { listCalendars, listEvents } from './calendar.js'
-import { startBridge, getBridgeStatus } from './bridge.js'
+import { startBridge, getBridgeStatus, enqueueCommand } from './bridge.js'
 
 const BRIDGE_PORT = Number(process.env.BRIDGE_PORT) || 8084
 
@@ -207,6 +207,31 @@ server.registerTool(
   async () => {
     try {
       return jsonResult(getBridgeStatus(bridgeState))
+    } catch (error) {
+      return errorResult(error)
+    }
+  }
+)
+
+server.registerTool(
+  'send_email',
+  {
+    title: 'Send email',
+    description: 'Composes and sends a new email from a connected account, via the Thunderbird WebExtension. Requires Thunderbird to be running with the bridge extension loaded — check bridge_status first.',
+    inputSchema: {
+      fromEmail: z.string().email().describe('The sending account\'s email address, as returned by list_accounts.'),
+      to: z.array(z.string().email()).min(1).describe('Recipient email addresses.'),
+      cc: z.array(z.string().email()).optional().describe('CC email addresses.'),
+      bcc: z.array(z.string().email()).optional().describe('BCC email addresses.'),
+      subject: z.string().describe('Email subject.'),
+      body: z.string().describe('Email body.'),
+      isPlainText: z.boolean().optional().describe('Whether body is plain text (default true). Set to false to send body as HTML.'),
+    },
+  },
+  async (args) => {
+    try {
+      const result = await enqueueCommand(bridgeState, 'send_email', args)
+      return jsonResult(result)
     } catch (error) {
       return errorResult(error)
     }

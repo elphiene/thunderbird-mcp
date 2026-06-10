@@ -100,3 +100,41 @@ version.
 **Trade-off:** If a future Thunderbird release drops MV2 support, the extension will
 need a migration to MV3 (service worker + `browser.scripting`/`alarms` for the
 heartbeat instead of `setInterval`).
+
+## D-008 · Send path: long-polling RPC bridge, address book WAL locking, and send-only scope
+
+**Decided:** 2026-06-10
+**Context:** Building milestone 8 (`send_email`) required (a) a way for the MCP server
+to invoke `browser.*` APIs running in the WebExtension's background page, (b) a new
+`SQLITE_BUSY` failure mode discovered in `list_contacts` testing, and (c) a scoping
+call on how much of the brief's "Email — send" surface to cover now.
+
+**Decisions:**
+- **RPC mechanism**: `GET /extension/poll` (long-polled, 25s timeout) +
+  `POST /extension/result`. The MCP server's `enqueueCommand()` hands a `{id, type,
+  payload}` to a waiting poll request (or queues it if none is waiting) and returns a
+  promise that resolves/rejects when `/extension/result` posts back, or after a 30s
+  command timeout. Chosen over WebSockets/SSE because MV2's persistent background page
+  can hold a long-lived `fetch` trivially, and this needed no new dependencies.
+- **Address book locking**: Thunderbird can switch `abook*.sqlite`/`history.sqlite`
+  into WAL mode and hold them locked *continuously* during active CardDAV sync (not
+  just transiently, unlike typical SQLite contention). `db.configure('busyTimeout',
+  ...)` doesn't help with a continuous lock. `getContactsFromAddressBook()` now catches
+  `SQLITE_BUSY`/"database is locked" per address book and throws a friendly,
+  per-book error (mirrors D-006's pattern for `calendar.js`); other address books are
+  unaffected. `scripts/test-client.js` treats this as an expected/non-fatal result for
+  `list_contacts`, same as it already did for `list_events`.
+- **Scope**: `send_email` covers compose-and-send only (`browser.compose.beginNew` +
+  `sendMessage(mode: 'sendNow')`). Reply/reply-all are deferred — `read_email`'s `id`
+  is an mbox `{absPath, offset}` (D-005), which doesn't map to Thunderbird's internal
+  WebExtension message IDs needed for `browser.compose.beginReply()`. A future
+  milestone would need to resolve that mapping (e.g. via `browser.messages.query()`
+  matched on the `Message-ID` header) before reply support can be added.
+
+**Why:** Long-polling fits MV2 with zero new dependencies; the address book fix keeps
+`list_contacts` consistent with `list_events`'s existing "locked DB" UX; scoping send
+to compose-only avoids blocking milestone 8 on an unverified message-id-mapping design.
+
+**Trade-off:** Long-polling holds one open connection per idle extension instance and
+adds up to ~25s of poll-cycle latency in the worst case (negligible for interactive
+use). Reply/reply-all remain unimplemented until the message-id mapping is designed.

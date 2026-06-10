@@ -86,6 +86,7 @@ function buildContact(addressBook, cardId, props) {
 
 async function getContactsFromAddressBook(addressBook) {
   const db = new sqlite3.Database(addressBook.path, sqlite3.OPEN_READONLY)
+  db.configure('busyTimeout', 3000)
   try {
     const rows = await all(db, 'SELECT card, name, value FROM properties')
     const cards = new Map()
@@ -94,6 +95,11 @@ async function getContactsFromAddressBook(addressBook) {
       cards.get(row.card)[row.name] = row.value
     }
     return [...cards.entries()].map(([cardId, props]) => buildContact(addressBook, cardId, props))
+  } catch (error) {
+    if (error.code === 'SQLITE_BUSY' || /database is locked/i.test(error.message)) {
+      throw new Error(`Address book "${addressBook.label}" is locked — Thunderbird may be syncing contacts; try again shortly.`)
+    }
+    throw error
   } finally {
     await closeDb(db)
   }

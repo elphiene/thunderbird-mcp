@@ -10,13 +10,14 @@
      `calendar-data/*.sqlite` for calendar.
    - **Write/send/manage path** (future): talks to the Thunderbird WebExtension over a
      local-only HTTP bridge.
-2. **Thunderbird WebExtension** (`extension/`, scaffolded) — thin shim. Currently just
-   sends a periodic heartbeat with the account list; write operations
-   (`browser.compose.*`, `browser.messages.*`, `browser.calendar.*`) land in
-   milestones 8-11.
+2. **Thunderbird WebExtension** (`extension/`) — thin shim. Sends a periodic heartbeat
+   with the account list, and polls the bridge for commands to execute via
+   `browser.*` APIs (currently `send_email` via `browser.compose.*`). Remaining write
+   operations (`browser.messages.*`, `browser.calendar.*`) land in milestones 9-11.
 3. **Local HTTP bridge** (`src/bridge.js`) — Express server, part of the MCP server
-   process, bound to `127.0.0.1:8084` only (override with `BRIDGE_PORT`). Currently
-   exposes `/health` and `/extension/heartbeat`.
+   process, bound to `127.0.0.1:8084` only (override with `BRIDGE_PORT`). Exposes
+   `/health`, `/extension/heartbeat`, and the long-polling RPC endpoints
+   `/extension/poll` + `/extension/result`.
 
 ## Current implementation status
 
@@ -24,7 +25,8 @@
 - Milestone 4 (contacts read path) — done.
 - Milestone 5 (calendar read path) — done.
 - Milestone 7 (WebExtension scaffold + bridge) — done.
-- Milestones 8-11 (send, message management, calendar/contact write) — not started.
+- Milestone 8 (send path) — done.
+- Milestones 9-11 (message management, calendar/contact write) — not started.
 
 ## Modules
 
@@ -44,7 +46,8 @@
 - `src/index.js` — MCP server entrypoint, registers tools, connects over stdio, and
   starts the bridge.
 - `extension/` — Thunderbird WebExtension (Manifest V2): `manifest.json` +
-  `background.js`, currently just a heartbeat shim.
+  `background.js` — heartbeat plus a poll/execute/result loop for RPC commands
+  (currently `send_email`).
 
 ## Email read path
 
@@ -104,6 +107,16 @@ with `emails: []`.
 
 `lists`/`list_cards` tables exist but are empty in this profile — not surfaced for v0.
 
+### Locking
+
+Unlike the calendar database, `abook*.sqlite`/`history.sqlite` can usually be read while
+Thunderbird is running. However, while Thunderbird is actively CardDAV-syncing an
+address book it switches that file into WAL mode and can hold it locked continuously
+(not just transiently) — `db.configure('busyTimeout', ...)` doesn't help with a
+continuous lock. `listContacts()` catches `SQLITE_BUSY`/"database is locked" per address
+book and returns a friendly error for that book (other address books are unaffected);
+`list_contacts` surfaces this as a tool error. See D-008.
+
 ## Calendar read path
 
 ### Calendar discovery
@@ -135,21 +148,28 @@ calendar has an `id` (the registry UUID), `name`, `type` (`storage` for the loca
 
 See `docs/DECISIONS.md` (D-006) for how this was verified.
 
-## WebExtension + bridge (scaffold)
+## WebExtension + bridge
 
 `src/bridge.js` starts an Express server bound to `127.0.0.1:8084` (override via
-`BRIDGE_PORT`) alongside the MCP stdio server. It currently exposes:
+`BRIDGE_PORT`) alongside the MCP stdio server. It exposes:
 
 - `GET /health` — `{ status, extensionConnected, lastHeartbeat }`.
 - `POST /extension/heartbeat` — called by the extension's background script every 30s
   with `{ accounts: [{ id, name, type }] }`. The bridge considers the extension
   "connected" if a heartbeat was received in the last 60 seconds.
+- `GET /extension/poll` — long-polled by the extension (up to 25s). Resolves
+  immediately with `{ command: {...} }` if a command is queued, otherwise resolves
+  with `{ command: null }` on timeout (the extension immediately re-polls).
+- `POST /extension/result` — the extension posts `{ id, ok, result, error }` back after
+  executing a command.
 
 `extension/` is a Manifest V2 WebExtension (`strict_min_version: "115.0"`,
 matches the installed Thunderbird 140 ESR — MV2 remains supported). Its
-`background.js` does nothing but heartbeat for now; all real logic
-(`browser.compose.*`, `browser.messages.*`, etc.) will be added in milestones 8-11,
-keeping the extension itself a thin shim per the brief's constraints.
+`background.js` heartbeats every 30s and runs a poll loop: each command from
+`/extension/poll` is dispatched (by `type`) to a handler that calls the relevant
+`browser.*` API and posts the outcome to `/extension/result`. All logic stays in the
+MCP server — the extension only translates `{type, payload}` commands into
+`browser.*` calls and relays results, per the brief's "thin shim" constraint.
 
 To load it in Thunderbird: Settings → General → (scroll to) "Add-ons and Themes" →
 gear icon → "Debug Add-ons" → "Load Temporary Add-on" → select
@@ -157,6 +177,32 @@ gear icon → "Debug Add-ons" → "Load Temporary Add-on" → select
 
 **Security**: the bridge binds to `127.0.0.1` explicitly (not `0.0.0.0`) — never expose
 this port via a tunnel or reverse proxy.
+
+### Send path (milestone 8)
+
+`send_email` calls `enqueueCommand(state, 'send_email', {...})`, which rejects
+immediately if the extension isn't connected (per `bridge_status`). Otherwise it queues
+a `send_email` command for the extension's poll loop and waits up to 30s for a result.
+
+In `background.js`, `sendEmail()` resolves `fromEmail` to an `identityId` via
+`browser.accounts.list()` (matching `identity.email === fromEmail`), then calls
+`browser.compose.beginNew({ identityId, to, cc, bcc, subject, plainTextBody|body,
+isPlainText })` followed by `browser.compose.sendMessage(tab.id, { mode: 'sendNow' })`.
+If no identity matches `fromEmail`, it throws before composing anything.
+
+**Scope**: compose-and-send only — reply/reply-all are deferred (see D-008). See
+`scripts/test-client.js` for the safe error-path test (an invalid `fromEmail` that the
+extension rejects before composing).
+
+### Testing the bridge/extension
+
+`npm run test:tools` spawns its own `node src/index.js` with `BRIDGE_PORT=18084` (not
+the default `8084`), so it doesn't collide with a persistent thunderbird-mcp instance
+that may already be running (e.g. the one wired into Claude Desktop/Cowork, which holds
+the real extension connection on `8084`). As a result, `bridge_status`/`send_email` in
+the test process will normally report "not connected" and `send_email` is skipped —
+this is expected. To exercise `send_email` end-to-end, use the persistent
+Cowork-wired instance directly (it already has the extension connected on `8084`).
 
 ## Tools
 
@@ -174,3 +220,6 @@ this port via a tunnel or reverse proxy.
   and/or date range. Requires Thunderbird to be closed.
 - `bridge_status` — reports whether the Thunderbird WebExtension is currently
   connected to the local HTTP bridge.
+- `send_email` — composes and sends a new email from a connected account via the
+  WebExtension (`browser.compose.*`). Requires the extension to be connected — check
+  `bridge_status` first.

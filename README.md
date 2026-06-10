@@ -4,16 +4,17 @@ An MCP server that gives Claude access to Thunderbird — read and search emails
 all connected accounts (including iCloud), look up contacts, and access the unified
 calendar.
 
-This is an early, read-only build. It works directly with your Thunderbird profile
-files and does **not** require Thunderbird to be running.
+The read path works directly with your Thunderbird profile files and does **not**
+require Thunderbird to be running. Sending email requires Thunderbird to be running
+with the bundled WebExtension loaded (see below).
 
 ## Status
 
 - ✅ Email read path: list accounts/folders, search emails, read full messages
 - ✅ Contacts read path: list address books, list/search contacts
 - ✅ Calendar read path: list calendars, list events (requires Thunderbird closed)
-- ✅ Local HTTP bridge + WebExtension scaffold (heartbeat only)
-- ⏳ Send/manage email, contact and calendar writes (via the WebExtension) — not yet
+- ✅ Local HTTP bridge + WebExtension: heartbeat + send email
+- ⏳ Message management (move/delete/tag) and contact/calendar writes — not yet
   implemented
 
 ## Setup
@@ -71,11 +72,13 @@ accounts" or "search my inbox for invoices".
 - `list_events` — lists calendar events by calendar/date range (requires Thunderbird
   to be closed)
 - `bridge_status` — reports whether the Thunderbird WebExtension is connected
+- `send_email` — composes and sends a new email from a connected account (requires
+  Thunderbird running with the extension loaded; check `bridge_status` first)
 
 See `docs/ARCHITECTURE.md` for how email parsing, message addressing, and the
 WebExtension bridge work, and `docs/BRIEF.md` for the full project scope and roadmap.
 
-## WebExtension (scaffold)
+## WebExtension
 
 `extension/` is a Manifest V2 Thunderbird WebExtension that connects to the local
 bridge. To load it:
@@ -86,8 +89,8 @@ bridge. To load it:
    `curl http://127.0.0.1:8084/health`) — `extensionConnected` should become `true`
    within ~30 seconds.
 
-It currently only sends a heartbeat; send/manage/write operations are not implemented
-yet.
+Once connected, `send_email` is available. Message management (move/delete/tag) and
+calendar/contact write operations are not implemented yet.
 
 ## Constraints
 
