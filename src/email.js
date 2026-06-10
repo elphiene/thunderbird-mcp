@@ -167,7 +167,9 @@ export async function getMessageRef({ id }) {
   const { absPath, offset } = decodeId(id)
   const raw = await readMessageAt(absPath, offset)
   const headers = extractHeaders(raw)
-  const headerMessageId = headers['message-id'] || null
+  // Strip angle brackets — browser.messages.query expects the bare id, not <id>.
+  const rawMsgId = headers['message-id'] || null
+  const headerMessageId = rawMsgId ? rawMsgId.replace(/^<|>$/g, '').trim() : null
   if (!headerMessageId) {
     throw new Error('This message has no Message-ID header — it cannot be targeted by management operations.')
   }

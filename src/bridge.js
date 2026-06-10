@@ -1,5 +1,6 @@
 import express from 'express'
 import { randomUUID } from 'crypto'
+import { execSync } from 'child_process'
 
 const HEARTBEAT_STALE_MS = 60_000
 const POLL_TIMEOUT_MS = 25_000
@@ -128,15 +129,33 @@ export function enqueueCommand(state, type, payload) {
   })
 }
 
+function evictStaleProcess(port) {
+  try {
+    const out = execSync(`ss -Htlnp sport = :${port} 2>/dev/null`, { encoding: 'utf8' }).trim()
+    const match = out.match(/pid=(\d+)/)
+    if (match) {
+      const pid = Number(match[1])
+      if (pid !== process.pid) {
+        process.kill(pid, 'SIGTERM')
+        // Brief pause to let the OS release the port before we bind.
+        execSync('sleep 0.3')
+        console.error(`thunderbird-mcp bridge: evicted stale process ${pid} on port ${port}`)
+      }
+    }
+  } catch { /* non-critical — bind attempt below will surface any real error */ }
+}
+
 export function startBridge(port = 8084) {
+  evictStaleProcess(port)
   const { app, state } = createBridge()
+
   const server = app.listen(port, '127.0.0.1', () => {
     console.error(`thunderbird-mcp bridge listening on http://127.0.0.1:${port}`)
   })
   server.on('error', (error) => {
     if (error.code === 'EADDRINUSE') {
       console.error(
-        `thunderbird-mcp bridge: port ${port} is already in use (likely another thunderbird-mcp instance) — bridge_status/send_email in this process will report disconnected.`
+        `thunderbird-mcp bridge: port ${port} is already in use — bridge_status/send_email in this process will report disconnected.`
       )
     } else {
       console.error('thunderbird-mcp bridge: failed to start —', error.message)

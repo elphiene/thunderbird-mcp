@@ -15,6 +15,7 @@
     "messagesMove",
     "messagesDelete",
     "messagesTags",
+    "messagesUpdate",
     "compose",
     "addressBooks",
     "contacts",
